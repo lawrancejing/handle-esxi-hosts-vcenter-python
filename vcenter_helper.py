@@ -49,3 +49,8 @@ def print_vc_inventory(vc_rootFolder):
                 print("                Number of VMs found for ESXi Host '%s': %d" % (host.name, len(vms)))
                 for vm in vms:
                     print("                - VM found with name: %s" % vm.name)
+        datastores = dc.datastoreFolder.childEntity
+        print("")
+        print("    Number of datastores found for DC '%s': %d" % (dc.name, len(datastores)))
+        for ds in datastores:
+            print("        + Datastore found with name: %s" % ds.name)
