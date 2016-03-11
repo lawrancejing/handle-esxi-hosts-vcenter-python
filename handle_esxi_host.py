@@ -26,6 +26,7 @@ def get_cluster_object_from_vc(vc_rootFolder, target_cluster_name):
                 return cl
     return None
 
+
 """
 Move an ESXi Host from its cluster to another cluster under the same vCenter
 """
@@ -133,7 +134,6 @@ def configure_host_network_for_vsan(host):
     if host.config.network.vnic:
         vm_kernel = host.config.network.vnic[0].device
 
-    # https://github.com/vmware/pyvmomi/blob/master/docs/vim/vsan/host/ConfigInfo.rst
     # Define the new network configuration
     new_vsan_port = vim.vsan.host.ConfigInfo.NetworkInfo.PortConfig(
                 ipConfig=None,
@@ -146,7 +146,6 @@ def configure_host_network_for_vsan(host):
             clusterInfo=None,  # vSAN storage configuration for this host -> not needed
             networkInfo=vim.vsan.host.ConfigInfo.NetworkInfo(port=[new_vsan_port]),  # vSAN network configuration for this host
     )
-    # https://github.com/vmware/pyvmomi/blob/master/docs/vim/host/VsanSystem.rst
     # Update the ESXi Host with its new vSAN configuration
     host.configManager.vsanSystem.UpdateVsan_Task(vsan_config)
 
