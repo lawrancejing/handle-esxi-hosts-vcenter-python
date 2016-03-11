@@ -37,7 +37,7 @@ def print_vc_inventory(vc_rootFolder):
         # Get list of clusters for current datacenter
         clusters = dc.hostFolder.childEntity
         print("    Number of clusters found for DC '%s': %d" % (dc.name, len(clusters)))
-        for cl in dc.hostFolder.childEntity:
+        for cl in clusters:
             print("    - Cluster found with name: %s" % cl.name)
             # Get list of ESXi Hosts for current cluster
             hosts = cl.host
