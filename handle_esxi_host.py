@@ -40,9 +40,9 @@ def move_host_to_another_cluster(host, dest_cluster):
     task_movehost = dest_cluster.MoveHostInto(host=host, resourcePool=None)
     while task_movehost.info.state == vim.TaskInfo.State.running:
         time.sleep(1)
-    if task_movehost.info.state == vim.TaskInfo.State.success:
+    if task_movehost.info.state != vim.TaskInfo.State.success:
         raise SystemExit("ABORT: Moving ESXi Host '%s' to cluster '%s' failed" % (host.name, dest_cluster.name))
-    print("Host '%s' moved successfully to Cluster '%s'!" % (host.name, dest_cluster.name))
+    print("ESXi Host '%s' moved successfully to Cluster '%s'!" % (host.name, dest_cluster.name))
 
     # ESXi Host exits Maintenance Mode
     host.ExitMaintenanceMode(timeout=0)
@@ -72,13 +72,13 @@ def add_standalone_esxi_host(vc_rootFolder, host_ip, hostUserName, hostPassword,
     task_addhost = dest_cluster.AddHost(spec=connect_spec, asConnected=True, resourcePool=None, license=None)
     while task_addhost.info.state == vim.TaskInfo.State.running:
         time.sleep(1)
-    if task_addhost.info.state == vim.TaskInfo.State.success:
+    if task_addhost.info.state != vim.TaskInfo.State.success:
         raise SystemExit("ABORT: Adding ESXi Host '%s' to vCenter failed" % host_ip)
 
     # Get Host object once added to the cluster
     host = get_host_object_from_vc(vc_rootFolder, host_ip)
     if host:
-        print("Host '%s' successfully added to Cluster '%s'!" % (host_ip, dest_cluster.name))
+        print("ESXi Host '%s' successfully added to Cluster '%s'!" % (host_ip, dest_cluster.name))
     else:
         raise SystemExit("ABORT: Adding ESXi Host '%s' to vCenter failed" % host_ip)
 
@@ -103,7 +103,7 @@ def get_host_ssl_thumbprint(host_ip):
         ps1 = subprocess.Popen(inter_cmds[0].split(), stdout=subprocess.PIPE)
         ps2 = subprocess.Popen(inter_cmds[1].split(), stdin=ps1.stdout, stdout=subprocess.PIPE)
         ps3 = subprocess.check_output(inter_cmds[2].split(), stdin=ps2.stdout)
-        ssl_thumbprint = ps3.split("=")[1]
+        ssl_thumbprint = ps3.split("=")[1].strip()
     except:
         raise SystemExit("ABORT: SSL Thumprint retrieval for ESXi Host %s failed" % host_ip)
     if ssl_thumbprint is None or len(ssl_thumbprint.split(':')) is not 20:
@@ -131,7 +131,7 @@ Configure the ESXi Host network to enable connection to vSAN cluster
 def configure_host_network_for_vsan(host):
     # Get VMkernel (~ VirtualNIC) object from the host
     if host.config.network.vnic:
-        vm_kernel = host.config.network.vnic[0].device
+        vm_kernel = host.config.network.vnic[0]
 
     # Define the new network configuration
     new_vsan_port = vim.vsan.host.ConfigInfo.NetworkInfo.PortConfig(
@@ -149,7 +149,6 @@ def configure_host_network_for_vsan(host):
     task_vsan = host.configManager.vsanSystem.UpdateVsan_Task(vsan_config)
     while task_vsan.info.state == vim.TaskInfo.State.running:
         time.sleep(1)
-    if task_vsan.info.state == vim.TaskInfo.State.success:
+    if task_vsan.info.state != vim.TaskInfo.State.success:
         raise SystemExit("ABORT: ESXi Host '%s' failed to reconfigure its network in attempt to join vSAN cluster" % host.name)
     print("ESXi Host '%s' successfully reconfigured its network to be able to join vSAN cluster!" % host.name)
-
