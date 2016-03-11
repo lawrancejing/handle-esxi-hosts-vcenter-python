@@ -26,7 +26,6 @@ def get_cluster_object_from_vc(vc_rootFolder, target_cluster_name):
                 return cl
     return None
 
-
 """
 Move an ESXi Host from its cluster to another cluster under the same vCenter
 """
@@ -39,9 +38,9 @@ def move_host_to_another_cluster(host, dest_cluster):
 
     # Move the ESXi Host to the target Cluster
     task_movehost = dest_cluster.MoveHostInto(host=host, resourcePool=None)
-    while str(task_movehost.info.state) == "running": #TODO: better condition
+    while task_movehost.info.state == vim.TaskInfo.State.running:
         time.sleep(1)
-    if str(task_movehost.info.state) != "success":
+    if task_movehost.info.state == vim.TaskInfo.State.success:
         raise SystemExit("ABORT: Moving ESXi Host '%s' to cluster '%s' failed" % (host.name, dest_cluster.name))
     print("Host '%s' moved successfully to Cluster '%s'!" % (host.name, dest_cluster.name))
 
@@ -71,9 +70,9 @@ def add_standalone_esxi_host(vc_rootFolder, host_ip, hostUserName, hostPassword,
     )
     # Add the host to the destination cluster
     task_addhost = dest_cluster.AddHost(spec=connect_spec, asConnected=True, resourcePool=None, license=None)
-    while str(task_addhost.info.state) == "running": #TODO: better condition
+    while task_addhost.info.state == vim.TaskInfo.State.running:
         time.sleep(1)
-    if str(task_addhost.info.state) != "success":
+    if task_addhost.info.state == vim.TaskInfo.State.success:
         raise SystemExit("ABORT: Adding ESXi Host '%s' to vCenter failed" % host_ip)
 
     # Get Host object once added to the cluster
@@ -147,8 +146,10 @@ def configure_host_network_for_vsan(host):
             networkInfo=vim.vsan.host.ConfigInfo.NetworkInfo(port=[new_vsan_port]),  # vSAN network configuration for this host
     )
     # Update the ESXi Host with its new vSAN configuration
-    host.configManager.vsanSystem.UpdateVsan_Task(vsan_config)
-
-
-
+    task_vsan = host.configManager.vsanSystem.UpdateVsan_Task(vsan_config)
+    while task_vsan.info.state == vim.TaskInfo.State.running:
+        time.sleep(1)
+    if task_vsan.info.state == vim.TaskInfo.State.success:
+        raise SystemExit("ABORT: ESXi Host '%s' failed to reconfigure its network in attempt to join vSAN cluster" % host.name)
+    print("ESXi Host '%s' successfully reconfigured its network to be able to join vSAN cluster!" % host.name)
 
