@@ -1,12 +1,15 @@
 from pyVmomi import vim
 import time
 import subprocess
+import vsan_helper
+import vcenter_helper
 
 """
-Retrive ESXi Host object from the vCenter inventory using the host name
+Retrieve ESXi Host object from the vCenter inventory using the host name
 """
-def get_host_object_from_vc(vc_rootFolder, target_host_name):
+def get_host_object_from_vc(vc_serviceInstance, target_host_name):
     # http://vmware.github.io/pyvmomi-community-samples/images/vchierarchy.png
+    vc_rootFolder = vc_serviceInstance.RetrieveContent().rootFolder
     for dc in vc_rootFolder.childEntity:
         for cl in dc.hostFolder.childEntity:
             for host in cl.host:
@@ -16,15 +19,31 @@ def get_host_object_from_vc(vc_rootFolder, target_host_name):
 
 
 """
-Retrive Cluster object from the vCenter inventory using the cluster name
+Retrieve ESXi Host object from the vCenter inventory using the host IPv4 Address
 """
-def get_cluster_object_from_vc(vc_rootFolder, target_cluster_name):
+def get_host_by_ip_address(vc_serviceInstance, target_ip_address):
     # http://vmware.github.io/pyvmomi-community-samples/images/vchierarchy.png
+    vc_rootFolder = vc_serviceInstance.RetrieveContent().rootFolder
+    for dc in vc_rootFolder.childEntity:
+        for cl in dc.hostFolder.childEntity:
+            for host in cl.host:
+                if host.config.network.vnic and host.config.network.vnic[0].spec.ip.ipAddress == target_ip_address:
+                    return host
+    return None
+
+
+"""
+Retrieve Cluster object from the vCenter inventory using the cluster name
+"""
+def get_cluster_object_from_vc(vc_serviceInstance, target_cluster_name):
+    # http://vmware.github.io/pyvmomi-community-samples/images/vchierarchy.png
+    vc_rootFolder = vc_serviceInstance.RetrieveContent().rootFolder
     for dc in vc_rootFolder.childEntity:
         for cl in dc.hostFolder.childEntity:
             if cl.name == target_cluster_name:
                 return cl
     return None
+
 
 """
 Move an ESXi Host from its cluster to another cluster under the same vCenter
@@ -54,7 +73,18 @@ def move_host_to_another_cluster(host, dest_cluster):
 """
 Add a standalone ESXi Host to a cluster by using the host IP Address
 """
-def add_standalone_esxi_host(vc_rootFolder, host_ip, hostUserName, hostPassword, dest_cluster):
+def add_standalone_esxi_host(vc_serviceInstance, host_ip, hostUserName, hostPassword, dest_cluster, cluster_vsan_enabled=False):
+    # Reconfigure the Host network interface if need be for vSAN
+    if cluster_vsan_enabled:
+        # Get Host object using its IPv4 Address
+        host_si = vcenter_helper.create_connection_to_endpoint(ip_address=host_ip, username=hostUserName, password=hostPassword)
+        host = get_host_by_ip_address(vc_serviceInstance=host_si, target_ip_address=host_ip)
+        # Check if reconfiguration is needed to have vSAN enabled
+        vsan_ready = vsan_helper.is_host_vsan_ready(host)
+        if not vsan_ready:
+            # Enable connection to vSAN network for the Host
+            vsan_helper.configure_host_network_for_vsan(host_si, host)
+
     # Define the Host Connect Spec
     connect_spec = vim.host.ConnectSpec(
         hostName=host_ip,  # DNS name or IP address of the host
@@ -68,6 +98,7 @@ def add_standalone_esxi_host(vc_rootFolder, host_ip, hostUserName, hostPassword,
         vimAccountPassword=None,  # account to be used for accessing the virtual machine files on the disk
         managementIp=None,  # IP address of the vC that will manage this host if different than connection
     )
+
     # Add the host to the destination cluster
     task_addhost = dest_cluster.AddHost(spec=connect_spec, asConnected=True, resourcePool=None, license=None)
     while task_addhost.info.state == vim.TaskInfo.State.running:
@@ -76,17 +107,14 @@ def add_standalone_esxi_host(vc_rootFolder, host_ip, hostUserName, hostPassword,
         raise SystemExit("ABORT: Adding ESXi Host '%s' to vCenter failed" % host_ip)
 
     # Get Host object once added to the cluster
-    host = get_host_object_from_vc(vc_rootFolder, host_ip)
+    host = get_host_object_from_vc(vc_serviceInstance, host_ip)
     if host:
         print("ESXi Host '%s' successfully added to Cluster '%s'!" % (host_ip, dest_cluster.name))
     else:
         raise SystemExit("ABORT: Adding ESXi Host '%s' to vCenter failed" % host_ip)
 
-    # Check if reconfiguration is needed for vSAN
-    vsan_ready = is_host_vsan_ready(host)
-    if not vsan_ready:
-        # Enable connection to vSAN network for the Host
-        configure_host_network_for_vsan(host)
+    # Force vSphere HA reconfiguration on the ESXi Host
+    # trigger_vsphereHA_reconfigure(host)
 
 
 """
@@ -112,43 +140,42 @@ def get_host_ssl_thumbprint(host_ip):
 
 
 """
-Check if the ESXi Host has:
-    - vSAN enabled
-    - its network interface ready to connect to a vSAN cluster
+Trigger vSphere HA reconfiguration on ESXi Host
 """
-def is_host_vsan_ready(host):
-    if host.config.vsanHostConfig.enabled is True:
-        if host.config.vsanHostConfig.networkInfo.port:
-            if host.config.vsanHostConfig.networkInfo.port[0].device:
-                return True
-    return False
-
-
-"""
-Configure the ESXi Host network to enable connection to vSAN cluster
--> enabling the vSAN service in the Properties of the VMKernel
-"""
-def configure_host_network_for_vsan(host):
-    # Get VMkernel (~ VirtualNIC) object from the host
-    if host.config.network.vnic:
-        vm_kernel = host.config.network.vnic[0]
-
-    # Define the new network configuration
-    new_vsan_port = vim.vsan.host.ConfigInfo.NetworkInfo.PortConfig(
-                ipConfig=None,
-                device=vm_kernel.device,  # Device name of the VMkernel used for vSAN
-    )
-    # Define new vSAN configuration for the ESXi Host
-    vsan_config = vim.vsan.host.ConfigInfo(
-            enabled=True,  # vSAN service is currently enabled on this host
-            hostSystem=host,  # Host
-            clusterInfo=None,  # vSAN storage configuration for this host -> not needed
-            networkInfo=vim.vsan.host.ConfigInfo.NetworkInfo(port=[new_vsan_port]),  # vSAN network configuration for this host
-    )
-    # Update the ESXi Host with its new vSAN configuration
-    task_vsan = host.configManager.vsanSystem.UpdateVsan_Task(vsan_config)
-    while task_vsan.info.state == vim.TaskInfo.State.running:
+def trigger_vsphereHA_reconfigure(host):
+    task_reconfigureHA = host.ReconfigureHostForDAS()
+    while task_reconfigureHA.info.state == vim.TaskInfo.State.running:
         time.sleep(1)
-    if task_vsan.info.state != vim.TaskInfo.State.success:
-        raise SystemExit("ABORT: ESXi Host '%s' failed to reconfigure its network in attempt to join vSAN cluster" % host.name)
-    print("ESXi Host '%s' successfully reconfigured its network to be able to join vSAN cluster!" % host.name)
+    if task_reconfigureHA.info.state != vim.TaskInfo.State.success:
+        raise SystemExit("ABORT: ESXi Host '%s' failed to reconfigure for HA" % host.name)
+    print("ESXi Host '%s' successfully reconfigured for HA!" % host.name)
+
+
+"""
+Wait for all the tasks running on an entity (host,cluster) to complete
+"""
+def wait_for_running_task_on_entity_to_complete(entity):
+    while any(t.info.state == vim.TaskInfo.State.running for t in entity.recentTask):
+        time.sleep(10)
+        print("At least 1 task is still running on the entity named '%s', keep waiting...\n" % entity.name)
+    print("No more running task on the entity named '%s'!" % entity.name)
+
+
+"""
+Remove an ESXi Host from the vCenter Inventory
+"""
+def remove_host_from_vc_inventory(host):
+    host_name = host.name
+    # ESXi Host enters Maintenance Mode
+    host.EnterMaintenanceMode(timeout=0, evacuatePoweredOffVms=True, maintenanceSpec=None)
+    while not host.runtime.inMaintenanceMode:
+        time.sleep(1)
+    print("ESXi Host '%s' entered in Maintenance Mode successfully!" % host_name)
+
+    # Destroy ESXi Host
+    task_destroyhost = host.Destroy()
+    while task_destroyhost.info.state == vim.TaskInfo.State.running:
+        time.sleep(1)
+    if task_destroyhost.info.state != vim.TaskInfo.State.success:
+        raise SystemExit("ABORT: ESXi Host '%s' failed to be removed from the vC inventory" % host_name)
+    print("ESXi Host '%s' removed from the vC inventory!" % host_name)
