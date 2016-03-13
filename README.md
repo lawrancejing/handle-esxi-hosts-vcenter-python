@@ -13,9 +13,6 @@ vc_details = {
     'pwd': '******',
 }
 
-vc_cluster_name = 'cls'
-vc_host_name = '10.161.16.225'
-
 
 def main(argv):
     # Establish connection with vCenter
@@ -26,14 +23,32 @@ def main(argv):
 
     # Print vC Inventory
     vcenter_helper.print_vc_inventory(vc_serviceInstance=vc_si)
-
-    # Test Cluster object retrieval
-    cluster = manage_esxi_host.get_cluster_object_from_vc(
+       
+    # Test Move an ESXi from a cluster to another
+    ## Get Cluster object (assuming a second cluster named 'cluster-test' got created)
+    second_cluster = manage_esxi_host.get_cluster_object_from_vc(
+                                 vc_serviceInstance=vc_si,
+                                 target_cluster_name='cluster-test')
+    ## Get Host object
+    host = manage_esxi_host.get_host_object_from_vc(
                                 vc_serviceInstance=vc_si,
-                                target_cluster_name=vc_cluster_name)
-    if cluster:
-       print(cluster.name)
-       print(len(cluster.host))
+                                target_host_name=vc_host_name)
+    ## Move the ESXi Host from its original cluster to the other cluster                            
+    manage_esxi_host.move_host_to_another_cluster(
+                                 host=host,
+                                 dest_cluster=second_cluster)
+                                 
+    # Test Add a standalone ESXi Host to a Cluster vSAN enabled
+    manage_esxi_host.add_standalone_esxi_host(
+                            vc_serviceInstance=vc_si,
+                            host_ip='10.161.16.225',
+                            hostUserName='root',
+                            hostPassword='****',
+                            dest_cluster=second_cluster,
+                            cluster_vsan_enabled=True)
+
+    # Test Remove an ESXi Host from the vCenter Inventory
+    manage_esxi_host.remove_host_from_vc_inventory(host)
 
 
 
