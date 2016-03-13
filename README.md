@@ -1,5 +1,14 @@
 # handle-esxi-hosts
-Python module used to handle ESXi Host - using pyVmomi (VMware vSphere API Python)
+Some Python modules used to handle ESXi Hosts:
+- Add a standalone ESXi Host to a Cluster with vSAN enabled or not
+- Move an ESXi Host from a cluster to another
+- Remove an ESXi Host from the vCenter inventory
+
++ Get the vCenter inventory
+
+Those moduels use pyVmomi (VMware vSphere API Python)
+
+
 
 
 ````python
