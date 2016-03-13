@@ -4,7 +4,7 @@ Some Python modules used to handle ESXi Hosts:
 - Move an ESXi Host from a cluster to another
 - Remove an ESXi Host from the vCenter inventory
 
-+ Get the vCenter inventory
+Bonus: Print out the vCenter inventory
 
 Those moduels use pyVmomi (VMware vSphere API Python)
 
