@@ -7,10 +7,10 @@ Check if the ESXi Host has:
     - its network interface ready to connect to a vSAN cluster
 """
 def is_host_vsan_ready(host):
-    if host.config.vsanHostConfig.enabled is True:
-        if host.config.vsanHostConfig.networkInfo.port:
-            if host.config.vsanHostConfig.networkInfo.port[0].device:
-                return True
+    # if host.config.vsanHostConfig.enabled is True:
+    if host.config.vsanHostConfig.networkInfo.port:
+        if host.config.vsanHostConfig.networkInfo.port[0].device:
+            return True
     return False
 
 
