@@ -5,18 +5,18 @@ import ssl
 # http://vmware.github.io/pyvmomi-community-samples/images/vchierarchy.png
 
 """
-Create a connection to vCenter by using the vC IP Address and a set of credentials
--> returns the vCenter rootFolder object
+Create a connection to vCenter or an ESXi Host by using the endpoint IP Address and a set of credentials
+-> returns the ServiceInstance object
 """
-def create_connection_to_vcenter(vc_ip_address, vc_username, vc_password):
+def create_connection_to_endpoint(ip_address, username, password):
     try:
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
         context.verify_mode = ssl.CERT_NONE
-        si = connect.SmartConnect(host=vc_ip_address,
-                                  user=vc_username,
-                                  pwd=vc_password,
+        si = connect.SmartConnect(host=ip_address,
+                                  user=username,
+                                  pwd=password,
                                   sslContext=context)
-        return si.RetrieveContent().rootFolder
+        return si
     except IOError, ex:
         raise SystemExit("Unable to connect to host with supplied info.")
 
@@ -28,7 +28,8 @@ Print the inventory of a vCenter, with:
     - list of ESXi Hosts per cluster
     - list of VMs per ESXi host
 """
-def print_vc_inventory(vc_rootFolder):
+def print_vc_inventory(vc_serviceInstance):
+    vc_rootFolder = vc_serviceInstance.RetrieveContent().rootFolder
     # Get list of datacenters
     datacenters = vc_rootFolder.childEntity
     print("Number of datacenters found: %d" % len(datacenters))
@@ -49,8 +50,10 @@ def print_vc_inventory(vc_rootFolder):
                 print("                Number of VMs found for ESXi Host '%s': %d" % (host.name, len(vms)))
                 for vm in vms:
                     print("                - VM found with name: %s" % vm.name)
+        # Get list of Datastores for current datacenter
         datastores = dc.datastoreFolder.childEntity
         print("")
         print("    Number of datastores found for DC '%s': %d" % (dc.name, len(datastores)))
         for ds in datastores:
             print("        + Datastore found with name: %s" % ds.name)
+
