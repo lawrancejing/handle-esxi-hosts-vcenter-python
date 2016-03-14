@@ -83,7 +83,7 @@ def add_standalone_esxi_host(vc_serviceInstance, host_ip, hostUserName, hostPass
         vsan_ready = vsan_helper.is_host_vsan_ready(host)
         if not vsan_ready:
             # Enable connection to vSAN network for the Host
-            vsan_helper.configure_host_network_for_vsan(host_si, host)
+            vsan_helper.configure_host_network_for_vsan(host)
 
     # Define the Host Connect Spec
     connect_spec = vim.host.ConnectSpec(

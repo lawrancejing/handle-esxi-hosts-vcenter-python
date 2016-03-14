@@ -18,8 +18,8 @@ import sys
 
 vc_details = {
     'host': '10.162.54.10',
-    'user': '******',
-    'pwd': '******',
+    'user': 'administrator@vsphere.local',
+    'pwd': '****',
 }
 
 
@@ -33,8 +33,21 @@ def main(argv):
 
     # Print vC Inventory
     vcenter_helper.print_vc_inventory(vc_serviceInstance=vc_si)
-      
-       
+
+
+    # Add a standalone ESXi Host to a Cluster with vSAN enabled
+    cluster = handle_esxi_host.get_cluster_object_from_vc(
+                                 vc_serviceInstance=vc_si,
+                                 target_cluster_name='cls')
+    handle_esxi_host.add_standalone_esxi_host(
+                                vc_serviceInstance=vc_si,
+                                host_ip='10.160.178.123',
+                                hostUserName='root',
+                                hostPassword='',
+                                dest_cluster=cluster,
+                                cluster_vsan_enabled=True)
+
+
     # Move an ESXi Host from a cluster to another
     ## Get Cluster object (assuming a second cluster named 'cluster-test' got created)
     second_cluster = handle_esxi_host.get_cluster_object_from_vc(
@@ -44,20 +57,10 @@ def main(argv):
     host = handle_esxi_host.get_host_object_from_vc(
                                 vc_serviceInstance=vc_si,
                                 target_host_name='10.145.6.172')
-    ## Move the ESXi Host from its original cluster to the other cluster                            
+    ## Move the ESXi Host from its original cluster to the other cluster
     handle_esxi_host.move_host_to_another_cluster(
                                  host=host,
                                  dest_cluster=second_cluster)
-                                 
-                                 
-    # Add a standalone ESXi Host to a Cluster with vSAN enabled
-    handle_esxi_host.add_standalone_esxi_host(
-                                vc_serviceInstance=vc_si,
-                                host_ip='10.161.16.225',
-                                hostUserName='root',
-                                hostPassword='****',
-                                dest_cluster=second_cluster,
-                                cluster_vsan_enabled=True)
 
 
     # Remove an ESXi Host from the vCenter Inventory
