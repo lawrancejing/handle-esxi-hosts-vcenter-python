@@ -48,7 +48,7 @@ def configure_host_network_for_vsan(host):
 
 """
 To test the connection between an ESXi Host and a vSAN cluster:
-    try to deploy a VM on this host for Compture & 'vsanDatastore' for Storage
+    try to deploy a VM on this host for Compute & 'vsanDatastore' for Storage
 """
 def deploy_vm_to_test_vsan_connection(host):
     return
