@@ -43,7 +43,7 @@ def configure_host_network_for_vsan(host):
         time.sleep(1)
     if task_vsan.info.state != vim.TaskInfo.State.success:
         raise SystemExit("ABORT: ESXi Host '%s' failed to reconfigure its network in attempt to join vSAN cluster" % host.name)
-    print("ESXi Host '%s' successfully reconfigured its network to be able to join vSAN cluster!" % host.name)
+    print("ESXi Host '%s' successfully reconfigured its VirtualNic(VMKernel) to enable vSAN!" % host.name)
 
 
 """

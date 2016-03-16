@@ -3,6 +3,7 @@ import time
 import subprocess
 import vsan_helper
 import vcenter_helper
+import os
 
 """
 Retrieve ESXi Host object from the vCenter inventory using the host name
@@ -71,19 +72,34 @@ def move_host_to_another_cluster(host, dest_cluster):
 
 
 """
-Add a standalone ESXi Host to a cluster by using the host IP Address
+Pre configure a standalone ESXi Host (datastore, vSAN service enablement,...) before attempting to add the host to a cluster
 """
-def add_standalone_esxi_host(vc_serviceInstance, host_ip, hostUserName, hostPassword, dest_cluster, cluster_vsan_enabled=False):
+def pre_configure_esxi_host(host_ip, hostUserName, hostPassword, cluster_vsan_enabled=False):
+    # Get Host object using its IPv4 Address
+    host_si = vcenter_helper.create_connection_to_endpoint(ip_address=host_ip, username=hostUserName, password=hostPassword)
+    host = get_host_by_ip_address(vc_serviceInstance=host_si, target_ip_address=host_ip)
+
     # Reconfigure the Host network interface if need be for vSAN
     if cluster_vsan_enabled:
-        # Get Host object using its IPv4 Address
-        host_si = vcenter_helper.create_connection_to_endpoint(ip_address=host_ip, username=hostUserName, password=hostPassword)
-        host = get_host_by_ip_address(vc_serviceInstance=host_si, target_ip_address=host_ip)
         # Check if reconfiguration is needed to have vSAN enabled
         vsan_ready = vsan_helper.is_host_vsan_ready(host)
         if not vsan_ready:
             # Enable connection to vSAN network for the Host
             vsan_helper.configure_host_network_for_vsan(host)
+
+    # Destroy all local datastores on the ESXi Host
+    # Special use case: using ONLY vSAN datastore & datastore URL conflicts between standalone ESXi hosts created
+    for ds in host.datastore:
+        ds.DestroyDatastore()
+    print("Initial reconfiguration of standalone ESXi Host '%s' succeeded!" % host_ip)
+
+
+"""
+Add a standalone ESXi Host to a cluster by using the host IP Address
+"""
+def add_standalone_esxi_host(vc_serviceInstance, host_ip, hostUserName, hostPassword, dest_cluster, cluster_vsan_enabled=False):
+    # Apply initial configuration on ESXi Host before attempting to add it to an actual Cluster
+    pre_configure_esxi_host(host_ip, hostUserName, hostPassword, cluster_vsan_enabled)
 
     # Define the Host Connect Spec
     connect_spec = vim.host.ConnectSpec(
@@ -114,7 +130,7 @@ def add_standalone_esxi_host(vc_serviceInstance, host_ip, hostUserName, hostPass
         raise SystemExit("ABORT: Adding ESXi Host '%s' to vCenter failed" % host_ip)
 
     # Force vSphere HA reconfiguration on the ESXi Host
-    # trigger_vsphereHA_reconfigure(host)
+    trigger_vsphereHA_reconfigure(host)
 
 
 """
@@ -122,20 +138,19 @@ Get the SSL Thumprint from an ESXi Host using openssl without host password need
 -> http://www.virtuallyghetto.com/2012/04/extracting-ssl-thumbprint-from-esxi.html
 """
 def get_host_ssl_thumbprint(host_ip):
-    #TODO: actual command is:
-    # "echo -n | openssl s_client -connect host_ip:443 2>/dev/null | openssl x509 -noout -fingerprint -sha1"
-    # => currently used version will print extra output in logs
     open_ssl_cmd = "echo -n | openssl s_client -connect %s:443 | openssl x509 -noout -fingerprint -sha1" % host_ip
     inter_cmds = open_ssl_cmd.split("|")
     try:
         ps1 = subprocess.Popen(inter_cmds[0].split(), stdout=subprocess.PIPE)
-        ps2 = subprocess.Popen(inter_cmds[1].split(), stdin=ps1.stdout, stdout=subprocess.PIPE)
+        FNULL = open(os.devnull, 'w')  # equivalent of /dev/null
+        ps2 = subprocess.Popen(inter_cmds[1].split(), stdin=ps1.stdout, stdout=subprocess.PIPE, stderr=FNULL)
         ps3 = subprocess.check_output(inter_cmds[2].split(), stdin=ps2.stdout)
         ssl_thumbprint = ps3.split("=")[1].strip()
     except:
         raise SystemExit("ABORT: SSL Thumprint retrieval for ESXi Host %s failed" % host_ip)
     if ssl_thumbprint is None or len(ssl_thumbprint.split(':')) is not 20:
         raise SystemExit("ABORT: SSL Thumprint retrieval for ESXi Host %s failed" % host_ip)
+    print("SSL Thumbprint for host '%s': '%s'" % (host_ip, ssl_thumbprint))
     return ssl_thumbprint
 
 
@@ -143,7 +158,7 @@ def get_host_ssl_thumbprint(host_ip):
 Trigger vSphere HA reconfiguration on ESXi Host
 """
 def trigger_vsphereHA_reconfigure(host):
-    task_reconfigureHA = host.ReconfigureHostForDAS()
+    task_reconfigureHA = host.ReconfigureDAS()
     while task_reconfigureHA.info.state == vim.TaskInfo.State.running:
         time.sleep(1)
     if task_reconfigureHA.info.state != vim.TaskInfo.State.success:
