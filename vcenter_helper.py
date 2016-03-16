@@ -27,6 +27,7 @@ Print the inventory of a vCenter, with:
     - list of Clusters per datacenter
     - list of ESXi Hosts per cluster
     - list of VMs per ESXi host
+    - list of Datastores per datacenter
 """
 def print_vc_inventory(vc_serviceInstance):
     vc_rootFolder = vc_serviceInstance.RetrieveContent().rootFolder
